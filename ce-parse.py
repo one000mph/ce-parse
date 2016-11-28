@@ -61,7 +61,7 @@ def paragraphsToQuestions(pIndex, pList, qDict, qList):
 # Returns: a tuple (index of the next question, the filled qDict)
 def parseQuestion(index, pList, qDict):
 	paragraph = pList[index].text
-	print "ATTEMPTING TO PARSE QUESTION\n" + paragraph
+	# print "ATTEMPTING TO PARSE QUESTION\n" + paragraph
 	if paragraph and not paragraph.isspace() and len(paragraph.split(' ')) < 4: # suspect an invalid question
 		print "POSSIBLE INVALID QUESTION: " + paragraph
 		exit(0)
@@ -84,9 +84,9 @@ def parseQuestion(index, pList, qDict):
 # 	qDict: a dictionary which will contain the question and corresponding answers
 # Returns: a tuple (index of the next paragraph to parse, the filled qDict)
 def parseAnswers(index, pList, qDict):
-	paragraph = pList[index].text
+	paragraph = pList[index].text.strip(' \t')
 	if len(paragraph.strip()) is not 0: # discard empty strings
-		# print "answer might be " + paragraph
+		print "answer might be " + paragraph
 		result = parseFourAnswersPerLine(paragraph)
 		if not result:
 			# try parsing two answers to a line
@@ -100,6 +100,9 @@ def parseAnswers(index, pList, qDict):
 				if not result: # Handle error case
 					print "ANSWER PARSE FAILED ON #" + str(index)
 					exit(0)
+		# strip any remaining whitespace
+		# for key, value in result.iteritems():
+		# 		result[key] = result[key].strip(' \t')
 		# add any parsed answers to qDict
 		qDict.update(result) 
 		# print "dict is now ", qDict
@@ -140,8 +143,10 @@ def parseTwoAnswersPerLine(index, answerLine):
 # 	answerLine: the string we are parsing
 # Returns: the parsed answers in a dictionary with keys {'answer1': ..., }
 def parseOneAnswerPerLine(index, answerLine):
-	key = 'answer' + str(index)
-	return {'answer' + str(index): answerLine}
+	pattern = '([ABCD]\.\s+)?(?P<answer' + str(index) + '>.+)'
+	result = re.search(pattern, answerLine)
+	returnDict = result.groupdict() if hasattr(result, 'groupdict') else None
+	return returnDict
 
 # Write questionList to CSV file
 # Argument(s):
