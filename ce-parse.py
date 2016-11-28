@@ -3,6 +3,9 @@
 # Author: Heather Young
 # Date: Nov 26 2016
 # Written for Current Electric Training course parsing
+# Reads a Microsoft Word document, parses questions and 
+# corresponding answers and then exports the questions
+# to a .csv file
 #
 
 import sys
@@ -34,6 +37,7 @@ def firstQuestion(pList):
 # Argument(s): 
 # 	pIndex: an index on the paragraph list
 # 	pList: a list of Paragraph Objects
+# 	qDict: a dictionary containing a question and its answers
 # 	qList: a list containing all parsed questions
 # Return: a list of dictionaries, each with question content
 def paragraphsToQuestions(pIndex, pList, qDict, qList):
@@ -41,8 +45,6 @@ def paragraphsToQuestions(pIndex, pList, qDict, qList):
 	# Add dictionary to question list
 	print "QDICT IS", qDict
 	qList.append(qDict)
-	# print "QLIST AFTER APPEND", qList
-	# print "passing Index: " + str(nextIndex) + " and recursing"
 	# Check to see if we have reached the end of the list
 	if nextIndex >= len(pList):
 		print str(len(qList))
@@ -60,16 +62,18 @@ def paragraphsToQuestions(pIndex, pList, qDict, qList):
 def parseQuestion(index, pList, qDict):
 	paragraph = pList[index].text
 	print "ATTEMPTING TO PARSE QUESTION\n" + paragraph
+	if paragraph and not paragraph.isspace() and len(paragraph.split(' ')) < 4: # suspect an invalid question
+		print "POSSIBLE INVALID QUESTION: " + paragraph
+		exit(0)
 	# ignore empty string or Copyright text, also check if the question has at least three words
 	if not paragraph or paragraph.isspace() or "Copyright" in paragraph:
-		print "CAUGHT BAD PARAGRAPH\n", paragraph
+		# print "CAUGHT BAD PARAGRAPH\n", paragraph
 		if index + 1 >= len(pList):
 			return index + 1, {}
 		else: return parseQuestion(index+1, pList, qDict)
 	else:
 		qDict['index'] = str(index)
 		qDict['question'] = paragraph
-		# print "ADDED TO DICT\n", qDict
 		return parseAnswers(index + 1, pList, qDict)
 
 
@@ -80,7 +84,6 @@ def parseQuestion(index, pList, qDict):
 # 	qDict: a dictionary which will contain the question and corresponding answers
 # Returns: a tuple (index of the next paragraph to parse, the filled qDict)
 def parseAnswers(index, pList, qDict):
-	print "INDEX IS " + str(index)
 	paragraph = pList[index].text
 	if len(paragraph.strip()) is not 0: # discard empty strings
 		# print "answer might be " + paragraph
@@ -98,14 +101,11 @@ def parseAnswers(index, pList, qDict):
 					print "ANSWER PARSE FAILED ON #" + str(index)
 					exit(0)
 		# add any parsed answers to qDict
-		if hasattr(result, 'named'): 
-			qDict.update(result.named) 
-		else: 
-			qDict.update(result)
+		qDict.update(result) 
 		# print "dict is now ", qDict
 		# if the dictionary is complete
 		if 'answer4' in qDict:
-			print "DICTIONARY COMPLETE"
+			# print "DICTIONARY COMPLETE"
 			nextIndex = index + 1
 			return nextIndex, qDict
 		# recurse on the rest of the answers
@@ -113,11 +113,20 @@ def parseAnswers(index, pList, qDict):
 	else:
 		return parseAnswers(index + 1, pList, qDict)
 
+
+# Argument(s):
+# 	answerLine: the string we are parsing
+# Returns: the parsed answers in a dictionary with keys {'answer1': ..., 'answer2':...}
 def parseFourAnswersPerLine(answerLine):
 	formatString = '{answer1:w}{:s}{:w}.{:s}{answer2:w}{:s}{:w}.{:s}{answer3:w}{:s}{:w}.{:s}{answer4:w}'
-	return parse(formatString,answerLine)
+	parsedResult = parse(formatString,answerLine)
+	result = parsedResult if hasattr(parsedResult, 'named') else None
+	return result
 
-
+# Argument(s):
+# 	index: the index of the answer [1: parse answers A and C, 2: parse answers B and D]
+# 	answerLine: the string we are parsing
+# Returns: the parsed answers in a dictionary with keys {'answer1': ..., 'answer2':...}
 def parseTwoAnswersPerLine(index, answerLine):
 	firstIdx = index
 	secondIdx = index + 2
@@ -125,23 +134,20 @@ def parseTwoAnswersPerLine(index, answerLine):
 	result = re.search(pattern, answerLine)
 	returnDict = result.groupdict() if hasattr(result, 'groupdict') else None
 	return returnDict
-	# formatNoEnum = '{}{answer' + str(firstIdx) + ':w}{:s}{:w}.{:s}{answer' + str(secondIndx) + ':w}'
-	# formatWithEnum = '{}{answer' + str(firstIdx) + ':w}{:s}{:w}.{:s}{answer' + str(secondIndx) + ':w}'
-	# result = parse(formatString, answerLine)
 
+# Argument(s):
+# 	index: the index of the answer [1: A, 2: B, 3: C, 4: D]
+# 	answerLine: the string we are parsing
+# Returns: the parsed answers in a dictionary with keys {'answer1': ..., }
 def parseOneAnswerPerLine(index, answerLine):
-	formatString = '{answer' + str(index) + '}'
-	return parse(formatString, answerLine)
+	key = 'answer' + str(index)
+	return {'answer' + str(index): answerLine}
 
-def listQuestions(filename):
-	questionList = []
-	questionDict = {}
-	# get list of Paragraph Objects
-	paragraphList = readDoc(filename)
-	# truncate the Header content
-	return paragraphsToQuestions(firstQuestion(paragraphList), paragraphList, questionDict, questionList)
-
-#write questionList to CSV file
+# Write questionList to CSV file
+# Argument(s):
+# 	listQuestions: a list of question dictionaries
+# 	outputFile: a .csv file to write to
+# Returns: Nothing
 def writeCSV(listQuestions, outputFile):
 	with open (outputFile, 'w') as csvfile:
 		fieldnames = listQuestions[0].keys()
@@ -152,11 +158,17 @@ def writeCSV(listQuestions, outputFile):
 			for fieldname, field in q.iteritems():
 				q[fieldname] = q[fieldname].encode('utf-8')
 			writer.writerow(q)
+	return None
 
 def main():
 	inputFile = sys.argv[1]
 	outputFile = sys.argv[2]
-	qList = listQuestions(inputFile)
+
+	questionList = [] # initialize list to contain question dictionaries
+	questionDict = {} # initialize first question dictionary
+	paragraphList = readDoc(inputFile) # get list of Paragraph Objects
+	firstQIndex = firstQuestion(paragraphList) # get index of first real question, ignore header
+	qList = paragraphsToQuestions(firstQIndex, paragraphList, questionDict, questionList) # fill questionList
 	return writeCSV(qList, outputFile)
 
 if __name__ == "__main__":
