@@ -163,7 +163,6 @@ def writeCSV(listQuestions, outputFile):
 def main():
 	inputFile = sys.argv[1]
 	outputFile = sys.argv[2]
-
 	questionList = [] # initialize list to contain question dictionaries
 	questionDict = {} # initialize first question dictionary
 	paragraphList = readDoc(inputFile) # get list of Paragraph Objects
