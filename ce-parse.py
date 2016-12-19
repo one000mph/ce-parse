@@ -11,6 +11,7 @@
 import sys
 import re
 import csv
+import time
 from parse import *
 from docx import *
 
@@ -34,24 +35,68 @@ def firstQuestion(pList):
 		if "Expire" in strParagraph:
 			return idx + 1
 
+
+# removes the headers from the answer sheet
+# Argument(s):
+# 	pList: a list of Paragraph Objects
+# Return: the index of the first answer ['A', 'B', 'C', 'D']
+def firstAnswer(pList):
+	for idx, paragraph in enumerate(pList):
+		# strip numerical list, underscores, and whitespace
+		strParagraph = (paragraph.text).strip('1234567890.\t_ ')
+		print "\nparagraph", strParagraph
+		if strParagraph:
+			strParagraph = strParagraph[0]
+			if len(strParagraph) < 2:
+				result = re.match('[ABCD]', strParagraph)
+				if result != None and result.group(0):
+					print "results", result.group(0)
+					return idx
+
+
+# Argument(s): 
+# 	qDict: a dictionary containing a question and its answers
+# 	aLetter: the letter of the correct answer
+# Return: the qDict with 'answer4' removed and the other answers shifted up by one
+def reOrderAnswers(qDict, answerLetter):
+	answerIndices = {'A':0, 'B':1, 'C':2, 'D':3}
+	answerFields = ['answer1', 'answer2', 'answer3', 'answer4']
+	answerIndex = answerIndices[answerLetter]
+	qDict['correct-answer'] = qDict[answerFields[answerIndex]]
+	for i in range(answerIndex, 3):
+		qDict[answerFields[i]] = qDict[answerFields[i+1]]
+	del qDict['answer4']
+	return qDict
+
+
+# Argument(s): 
+# 	qDict: a dictionary containing a question and its answers
+# 	aIndex: an index on the answer list
+#   aIndex: a list of answers paragraphs
+# Return: the qDict with the correct answer under the field 'correct-answer'
+def selectAnswer(qDict, aIndex, aList):
+	answerLetter = aList[aIndex].text.strip('1234567890.\t_ ')[0]
+	print "LETTER: ", answerLetter
+	return reOrderAnswers(qDict, answerLetter)
+
 # Argument(s): 
 # 	pIndex: an index on the paragraph list
 # 	pList: a list of Paragraph Objects
 # 	qDict: a dictionary containing a question and its answers
 # 	qList: a list containing all parsed questions
+#   aIndex: an index on the answer list
 # Return: a list of dictionaries, each with question content
-def paragraphsToQuestions(pIndex, pList, qDict, qList):
+def paragraphsToQuestions(pIndex, pList, qDict, qList, aIndex, aList):
 	nextIndex, qDict = parseQuestion(pIndex, pList, qDict)
 	# Add dictionary to question list
-	print "QDICT IS", qDict
+	if qDict:
+		qDict = selectAnswer(qDict, aIndex, aList)
 	qList.append(qDict)
 	# Check to see if we have reached the end of the list
 	if nextIndex >= len(pList):
-		print str(len(qList))
-		print "QLIST AFTER APPEND", qList
 		return qList
 	else: 
-		return paragraphsToQuestions(nextIndex, pList, {}, qList)
+		return paragraphsToQuestions(nextIndex, pList, {}, qList, aIndex+1, aList)
 
 # Recursively parses questions from Paragraphs
 # Argument(s):
@@ -61,7 +106,6 @@ def paragraphsToQuestions(pIndex, pList, qDict, qList):
 # Returns: a tuple (index of the next question, the filled qDict)
 def parseQuestion(index, pList, qDict):
 	paragraph = pList[index].text
-	# print "ATTEMPTING TO PARSE QUESTION\n" + paragraph
 	if paragraph and not paragraph.isspace() and len(paragraph.split(' ')) < 4: # suspect an invalid question
 		print "POSSIBLE INVALID QUESTION: " + paragraph
 		exit(0)
@@ -86,7 +130,7 @@ def parseQuestion(index, pList, qDict):
 def parseAnswers(index, pList, qDict):
 	paragraph = pList[index].text.strip(' \t')
 	if len(paragraph.strip()) is not 0: # discard empty strings
-		print "answer might be " + paragraph
+		# print "answer might be " + paragraph
 		result = parseFourAnswersPerLine(paragraph)
 		if not result:
 			# try parsing two answers to a line
@@ -100,15 +144,10 @@ def parseAnswers(index, pList, qDict):
 				if not result: # Handle error case
 					print "ANSWER PARSE FAILED ON #" + str(index)
 					exit(0)
-		# strip any remaining whitespace
-		# for key, value in result.iteritems():
-		# 		result[key] = result[key].strip(' \t')
 		# add any parsed answers to qDict
 		qDict.update(result) 
-		# print "dict is now ", qDict
 		# if the dictionary is complete
 		if 'answer4' in qDict:
-			# print "DICTIONARY COMPLETE"
 			nextIndex = index + 1
 			return nextIndex, qDict
 		# recurse on the rest of the answers
@@ -148,6 +187,7 @@ def parseOneAnswerPerLine(index, answerLine):
 	returnDict = result.groupdict() if hasattr(result, 'groupdict') else None
 	return returnDict
 
+
 # Write questionList to CSV file
 # Argument(s):
 # 	listQuestions: a list of question dictionaries
@@ -155,11 +195,11 @@ def parseOneAnswerPerLine(index, answerLine):
 # Returns: Nothing
 def writeCSV(listQuestions, outputFile):
 	with open (outputFile, 'w') as csvfile:
-		fieldnames = listQuestions[0].keys()
-		writer = csv.DictWriter(csvfile, fieldnames = fieldnames)
+		# set order of columns
+		fieldnames = ['index', 'question', 'correct-answer', 'answer1', 'answer2', 'answer3']
+		writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 		writer.writeheader()
 		for q in listQuestions:
-			print "\nATTEMPTING WRITE", q.values()
 			for fieldname, field in q.iteritems():
 				q[fieldname] = q[fieldname].encode('utf-8')
 			writer.writerow(q)
@@ -167,12 +207,16 @@ def writeCSV(listQuestions, outputFile):
 
 def main():
 	inputFile = sys.argv[1]
-	outputFile = sys.argv[2]
+	answerFile = sys.argv[2]
+	outputFile = sys.argv[3]
 	questionList = [] # initialize list to contain question dictionaries
 	questionDict = {} # initialize first question dictionary
 	paragraphList = readDoc(inputFile) # get list of Paragraph Objects
+	answerList = readDoc(answerFile) # list of answers
 	firstQIndex = firstQuestion(paragraphList) # get index of first real question, ignore header
-	qList = paragraphsToQuestions(firstQIndex, paragraphList, questionDict, questionList) # fill questionList
+	firstAIndex = firstAnswer(answerList)
+	print firstAIndex
+	qList = paragraphsToQuestions(firstQIndex, paragraphList, questionDict, questionList, firstAIndex, answerList) # fill questionList
 	return writeCSV(qList, outputFile)
 
 if __name__ == "__main__":
