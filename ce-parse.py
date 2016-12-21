@@ -44,7 +44,7 @@ def firstAnswer(pList):
 	for idx, paragraph in enumerate(pList):
 		# strip numerical list, underscores, and whitespace
 		strParagraph = (paragraph.text).strip('1234567890.\t_ ')
-		print "\nparagraph", strParagraph
+		# print "\nparagraph", strParagraph
 		if strParagraph:
 			strParagraph = strParagraph[0]
 			if len(strParagraph) < 2:
@@ -74,9 +74,13 @@ def reOrderAnswers(qDict, answerLetter):
 # 	aIndex: an index on the answer list
 #   aIndex: a list of answers paragraphs
 # Return: the qDict with the correct answer under the field 'correct-answer'
-def selectAnswer(qDict, aIndex, aList):
-	answerLetter = aList[aIndex].text.strip('1234567890.\t_ ')[0]
-	print "LETTER: ", answerLetter
+def selectAnswerAndReference(qDict, aIndex, aList):
+	sanitizedData = aList[aIndex].text.lstrip('1234567890.\t_ ')
+	answerLetter = sanitizedData[0]
+	reference = sanitizedData[1:].strip('\t_ ')
+	# print "LETTER: ", answerLetter
+	# print "REFERENCE: ", reference
+	qDict['reference'] = reference
 	return reOrderAnswers(qDict, answerLetter)
 
 # Argument(s): 
@@ -90,7 +94,7 @@ def paragraphsToQuestions(pIndex, pList, qDict, qList, aIndex, aList):
 	nextIndex, qDict = parseQuestion(pIndex, pList, qDict)
 	# Add dictionary to question list
 	if qDict:
-		qDict = selectAnswer(qDict, aIndex, aList)
+		qDict = selectAnswerAndReference(qDict, aIndex, aList)
 	qList.append(qDict)
 	# Check to see if we have reached the end of the list
 	if nextIndex >= len(pList):
@@ -196,7 +200,7 @@ def parseOneAnswerPerLine(index, answerLine):
 def writeCSV(listQuestions, outputFile):
 	with open (outputFile, 'w') as csvfile:
 		# set order of columns
-		fieldnames = ['index', 'question', 'correct-answer', 'answer1', 'answer2', 'answer3']
+		fieldnames = ['index', 'question', 'reference', 'correct-answer', 'answer1', 'answer2', 'answer3']
 		writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 		writer.writeheader()
 		for q in listQuestions:
