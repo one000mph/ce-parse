@@ -3,7 +3,7 @@
 # Author: Heather Young
 # Date: Nov 26 2016
 # Written for Current Electric Training course parsing
-# Reads a Microsoft Word document, parses questions and 
+# Reads a Microsoft Word document, parses questions and
 # corresponding answers and then exports the questions
 # to a .csv file
 #
@@ -16,7 +16,7 @@ from parse import *
 from docx import *
 
 # Reads a Microsoft Word document using the docx Python library
-# Argument(s): 
+# Argument(s):
 #	filepath: the file to be read
 # Return: a list of Paragraph Objects
 def readDoc(filepath):
@@ -54,7 +54,7 @@ def firstAnswer(pList):
 					return idx
 
 
-# Argument(s): 
+# Argument(s):
 # 	qDict: a dictionary containing a question and its answers
 # 	aLetter: the letter of the correct answer
 # Return: the qDict with 'answer4' removed and the other answers shifted up by one
@@ -69,7 +69,7 @@ def reOrderAnswers(qDict, answerLetter):
 	return qDict
 
 
-# Argument(s): 
+# Argument(s):
 # 	qDict: a dictionary containing a question and its answers
 # 	aIndex: an index on the answer list
 #   aIndex: a list of answers paragraphs
@@ -78,12 +78,12 @@ def selectAnswerAndReference(qDict, aIndex, aList):
 	sanitizedData = aList[aIndex].text.lstrip('1234567890.\t_ ')
 	answerLetter = sanitizedData[0]
 	reference = sanitizedData[1:].strip('\t_ ')
-	# print "LETTER: ", answerLetter
-	# print "REFERENCE: ", reference
+	print "LETTER: ", answerLetter
+	print "REFERENCE: ", reference
 	qDict['reference'] = reference
 	return reOrderAnswers(qDict, answerLetter)
 
-# Argument(s): 
+# Argument(s):
 # 	pIndex: an index on the paragraph list
 # 	pList: a list of Paragraph Objects
 # 	qDict: a dictionary containing a question and its answers
@@ -94,12 +94,13 @@ def paragraphsToQuestions(pIndex, pList, qDict, qList, aIndex, aList):
 	nextIndex, qDict = parseQuestion(pIndex, pList, qDict)
 	# Add dictionary to question list
 	if qDict:
+		print "qDict is", qDict
 		qDict = selectAnswerAndReference(qDict, aIndex, aList)
 	qList.append(qDict)
 	# Check to see if we have reached the end of the list
 	if nextIndex >= len(pList):
 		return qList
-	else: 
+	else:
 		return paragraphsToQuestions(nextIndex, pList, {}, qList, aIndex+1, aList)
 
 # Recursively parses questions from Paragraphs
@@ -110,7 +111,7 @@ def paragraphsToQuestions(pIndex, pList, qDict, qList, aIndex, aList):
 # Returns: a tuple (index of the next question, the filled qDict)
 def parseQuestion(index, pList, qDict):
 	paragraph = pList[index].text
-	if paragraph and not paragraph.isspace() and len(paragraph.split(' ')) < 4: # suspect an invalid question
+	if paragraph and not paragraph.isspace() and len(paragraph.split(' ')) < 2: # suspect an invalid question
 		print "POSSIBLE INVALID QUESTION: " + paragraph
 		exit(0)
 	# ignore empty string or Copyright text, also check if the question has at least three words
@@ -120,6 +121,7 @@ def parseQuestion(index, pList, qDict):
 			return index + 1, {}
 		else: return parseQuestion(index+1, pList, qDict)
 	else:
+		print "PARAGRAPH: ", paragraph
 		qDict['index'] = str(index)
 		qDict['question'] = paragraph
 		return parseAnswers(index + 1, pList, qDict)
@@ -149,7 +151,7 @@ def parseAnswers(index, pList, qDict):
 					print "ANSWER PARSE FAILED ON #" + str(index)
 					exit(0)
 		# add any parsed answers to qDict
-		qDict.update(result) 
+		qDict.update(result)
 		# if the dictionary is complete
 		if 'answer4' in qDict:
 			nextIndex = index + 1
@@ -176,7 +178,18 @@ def parseFourAnswersPerLine(answerLine):
 def parseTwoAnswersPerLine(index, answerLine):
 	firstIdx = index
 	secondIdx = index + 2
-	pattern = '([ABCD]\.\s+)?(?P<answer' + str(firstIdx) + '>.+?)(\t+)([ABCD]\.\s+)?(?P<answer' + str(secondIdx) + '>.+)(\t+)?'
+
+	# match letter
+	mL = '([ABCD]\.[\t ]+)'
+	# match space and letter
+	smL = '([\t ]*' + mL + ')'
+	# answer1|3
+	fA = 'answer' + str(firstIdx)
+	# answer2|4
+	sA = 'answer' + str(secondIdx)
+
+  #
+	pattern = mL + '?(?P<'+ fA + '>.+?)(?=' + smL + ')' + smL + '(?P<'+ sA +'>.+)$'
 	result = re.search(pattern, answerLine)
 	returnDict = result.groupdict() if hasattr(result, 'groupdict') else None
 	return returnDict
@@ -219,7 +232,6 @@ def main():
 	answerList = readDoc(answerFile) # list of answers
 	firstQIndex = firstQuestion(paragraphList) # get index of first real question, ignore header
 	firstAIndex = firstAnswer(answerList)
-	print firstAIndex
 	qList = paragraphsToQuestions(firstQIndex, paragraphList, questionDict, questionList, firstAIndex, answerList) # fill questionList
 	return writeCSV(qList, outputFile)
 
